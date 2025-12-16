@@ -1,0 +1,26 @@
+{
+    "$schema": "./config-schema.json",
+    "namespaces": [
+        "http://example.com"
+    ],
+    "servers": [
+        {
+            "port": 4840,
+            "path": "/example/server",
+            "objects": [
+                {
+                    "ns": 0,
+                    "name": "MyObject",
+                    "variables": [
+                        {
+                            "ns": 0,
+                            "name": "MyVariable",
+                            "min": 0,
+                            "max": 1
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
