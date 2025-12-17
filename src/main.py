@@ -2,16 +2,16 @@ import asyncio
 import json
 import time
 from asyncua import Client
-from asyncio_mqtt import Client as MqttClient, MqttError
+from aiomqtt import Client as MqttClient, MqttError
 
 # settings
 MOCK_CONFIG_PATH = "config.json"
 OPCUA_HOST = "127.0.0.1"
 MQTT_HOST = "127.0.0.1"
-MQTT_PORT = "1883"
+MQTT_PORT = 1883
 MQTT_BASE_TOPIC = "opcua" # prefix for messages comming from OPC UA
 MQTT_QOS = 1 # messages will arrive at least once
-MQTT_RETAIN = 1 # retain last value on broker
+MQTT_RETAIN = True # retain last value on broker
 
 # load targets/variables we expect from opc ua (from config.json)
 def load_targets(config_path):
@@ -39,7 +39,9 @@ def load_targets(config_path):
 async def mqtt_publisher(queue):
     while True:
         try:
+            print(f"trying MQTT connect to {MQTT_HOST}:{MQTT_PORT}")
             async with MqttClient(MQTT_HOST, MQTT_PORT) as mqtt:
+                print(f"connected to MQTT {MQTT_HOST}:{MQTT_PORT}")
                 while True:
                     topic_suffix, payload = await queue.get()
                     topic = f"{MQTT_BASE_TOPIC}/{topic_suffix}"
@@ -57,7 +59,7 @@ class Handler:
         self.out_q = out_q
 
     # identify the change, wrap it and push to queue if possible
-    def datachange_notification(self, node, val):
+    def datachange_notification(self, node, val, data):
         t = self.nodeid_to_target.get(str(node.nodeid))
         if not t:
             return
@@ -66,14 +68,14 @@ class Handler:
             "timestamp_ms": int(time.time() * 1000),
             "source": {
                 "endpoint": self.endpoint,
-                "browse_path": t.browse_path(),
+                "browse_path": f"/Objects/{t['obj']}/{t['var']}",
                 "node_id": str(node.nodeid),
             },
             "value": val,
         }
-
+        print("opcua update:", t["obj"], t["var"], val)
         try:
-            self.out_q.put_nowait((t.topic_suffix(), payload))
+            self.out_q.put_nowait((f"{t['port']}/{t['obj']}/{t['var']}", payload))
         except asyncio.QueueFull:
             pass
 
@@ -83,14 +85,15 @@ async def watch_server(port, path, targets, out_q):
     while True:
         try:
             async with Client(url=endpoint) as client:
+                print("connected to OPC UA", endpoint)
                 resolved = []
 
                 for target in targets:
-                    ns = await client.get_namespace_index(target.namespace_uri)
+                    ns = await client.get_namespace_index(target["namespace_uri"])
                     node = await client.nodes.root.get_child([
                         "0:Objects",
-                        f"{ns}:{target.obj}",
-                        f"{ns}:{target.var}",
+                        f"{ns}:{target['obj']}",
+                        f"{ns}:{target['var']}",
                     ])
                     resolved.append((target, node))
 
@@ -99,19 +102,20 @@ async def watch_server(port, path, targets, out_q):
                 sub = await client.create_subscription(500, handler) # 500ms publishing interval
                 for _, node in resolved:
                     await sub.subscribe_data_change(node)
+                print("subscribed to", len(resolved), "nodes on", endpoint)
                 while True:
                     await asyncio.sleep(1)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as e:
+            print("OPC UA error:", repr(e))
             await asyncio.sleep(1)
 
 async def main():
     targets = load_targets(MOCK_CONFIG_PATH)
     by_server = {}
     for t in targets:
-        by_server.setdefault((t.port, t.path), []).append(t)
-
+        by_server.setdefault((t["port"], t["path"]), []).append(t)
     out_q = asyncio.Queue(maxsize=10000)
     tasks = [asyncio.create_task(mqtt_publisher(out_q))]
     for (port, path), ts in by_server.items():
