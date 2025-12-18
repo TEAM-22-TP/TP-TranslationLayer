@@ -73,7 +73,9 @@ class Handler:
             },
             "value": val,
         }
-        print("opcua update:", t["obj"], t["var"], val)
+        # print("opcua update:", t["obj"], t["var"], val)
+        print("update:\n", payload)
+        print()
         try:
             self.out_q.put_nowait((f"{t['port']}/{t['obj']}/{t['var']}", payload))
         except asyncio.QueueFull:
