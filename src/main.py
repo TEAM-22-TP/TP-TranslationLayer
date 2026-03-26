@@ -5,10 +5,12 @@ from asyncua import Client
 from aiomqtt import Client as MqttClient, MqttError
 
 # settings
+import os
+
 MOCK_CONFIG_PATH = "config.json"
-OPCUA_HOST = "127.0.0.1"
-MQTT_HOST = "127.0.0.1"
-MQTT_PORT = 1883
+OPCUA_HOST = os.getenv("OPCUA_HOST", "mock-opcua")
+MQTT_HOST = os.getenv("MQTT_HOST", "mosquitto")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_BASE_TOPIC = "opcua" # prefix for messages comming from OPC UA
 MQTT_QOS = 1 # messages will arrive at least once
 MQTT_RETAIN = True # retain last value on broker
