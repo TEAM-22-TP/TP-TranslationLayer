@@ -85,7 +85,7 @@ class Handler:
 
 # watch a single opc ua server for changes
 async def watch_server(port, path, targets, out_q):
-    endpoint = f"opc.tcp://{OPCUA_HOST}:{port}{path}"
+    endpoint = f"opc.tcp://{OPCUA_HOST}:{port}/{path.lstrip('/')}"
     while True:
         try:
             async with Client(url=endpoint) as client:
